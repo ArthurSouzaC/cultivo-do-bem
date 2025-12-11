@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,6 +19,10 @@ function RouteComponent() {
   const navigate = useNavigate();
   const groups = useQuery(api.group.list);
   const userId = getUserIdFromLocalStorage();
+  const userGroup = useQuery(
+    api.group.getUserGroup,
+    userId ? { userId } : "skip"
+  );
   const ownedGroups =
     groups?.filter((g: any) => String(g.createdBy) === String(userId)) ?? [];
   const memberGroups =
@@ -32,11 +36,66 @@ function RouteComponent() {
   const removeParticipant = useMutation(api.group.removeParticipant);
 
   const [editing, setEditing] = useState(false);
-  const [editGroup, setEditGroup] = useState<any | null>(null);
+  const [editGroup, setEditGroup] = useState<any>(null);
+
+  // Check if user is already in a group
+  const isInGroup = userGroup !== undefined && userGroup !== null;
 
   async function onDelete(id: any) {
     if (!confirm("Excluir grupo?")) return;
     await remove({ id });
+  }
+
+  async function handleRemoveParticipant(groupId: any, participantId: any) {
+    try {
+      console.log("=== Iniciando remoção de participante ===");
+      console.log("Group ID:", groupId);
+      console.log("Participant ID:", participantId);
+      console.log("Estado atual editGroup:", editGroup);
+
+      await removeParticipant({
+        groupId,
+        userId: participantId,
+      });
+
+      console.log("✅ Participante removido no backend");
+
+      // Atualizar o estado local removendo o participante
+      setEditGroup((prev: any) => {
+        console.log("Estado anterior:", prev);
+        if (!prev) {
+          console.log("⚠️ Estado anterior é null");
+          return prev;
+        }
+
+        const newParticipants = prev.participants.filter(
+          (pid: any) => String(pid) !== String(participantId)
+        );
+        const newParticipantsFull = prev.participantsFull.filter(
+          (participant: any) =>
+            String(participant._id) !== String(participantId)
+        );
+
+        console.log("Participantes antes:", prev.participants.length);
+        console.log("Participantes depois:", newParticipants.length);
+        console.log("ParticipantsFull antes:", prev.participantsFull.length);
+        console.log("ParticipantsFull depois:", newParticipantsFull.length);
+
+        const newState = {
+          ...prev,
+          participants: newParticipants,
+          participantsFull: newParticipantsFull,
+        };
+
+        console.log("Novo estado:", newState);
+        return newState;
+      });
+
+      console.log("=== Remoção concluída ===");
+    } catch (error) {
+      console.error("❌ Erro ao remover participante:", error);
+      alert(`Erro ao remover participante: ${error}`);
+    }
   }
 
   return (
@@ -60,16 +119,39 @@ function RouteComponent() {
               </h2>
             </div>
           </div>
-          <p className="text-[#7c6a5c] mb-4">
-            Crie um grupo para colaborar com outros produtores rurais
-          </p>
-          <Button
-            onClick={() => navigate({ to: "/groups/new" })}
-            className="w-full bg-[#ffa726] text-white font-semibold hover:bg-[#ff9800]"
-          >
-            <Plus size={18} className="mr-2" />
-            Criar Novo Grupo
-          </Button>
+          {isInGroup ? (
+            <>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <p className="text-amber-800 text-sm mb-2">
+                  ⚠️ Você já está em um grupo
+                </p>
+                <p className="text-amber-700 text-sm">
+                  Você já é membro do grupo "<strong>{userGroup?.name}</strong>
+                  ". Para criar um novo grupo, você precisa sair do grupo atual
+                  primeiro.
+                </p>
+              </div>
+              <Button
+                onClick={() => navigate({ to: `/groups/${userGroup._id}` })}
+                className="w-full bg-[#ffa726] text-white font-semibold hover:bg-[#ff9800]"
+              >
+                Ver Meu Grupo
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-[#7c6a5c] mb-4">
+                Crie um grupo para colaborar com outros produtores rurais
+              </p>
+              <Button
+                onClick={() => navigate({ to: "/groups/new" })}
+                className="w-full bg-[#ffa726] text-white font-semibold hover:bg-[#ff9800]"
+              >
+                <Plus size={18} className="mr-2" />
+                Criar Novo Grupo
+              </Button>
+            </>
+          )}
         </Card>
 
         {/* Owned Groups */}
@@ -315,37 +397,38 @@ function RouteComponent() {
                 }))
               }
             />
-            {(editGroup.participantsFull ?? []).map((p: any) => (
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Participantes</div>
-                <ul className="ml-2">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Participantes</div>
+              <ul className="ml-2 space-y-2">
+                {(editGroup.participantsFull ?? []).map((p: any) => (
                   <li
                     key={p._id}
                     className="flex items-center justify-between gap-2"
                   >
                     <span className="text-sm">
-                      {p.name ?? p.email} ({p._id})
+                      {p.name ?? p.email}
+                      {String(p._id) === String(userId) && " (Você)"}
                     </span>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={async () => {
-                        await removeParticipant({
-                          groupId: editGroup._id,
-                          userId: p._id,
-                        });
-                        const refreshed =
-                          groups?.find((gg: any) => gg._id === editGroup._id) ??
-                          null;
-                        setEditGroup(refreshed);
-                      }}
-                    >
-                      Remover
-                    </Button>
+                    {String(p._id) === String(userId) ? (
+                      <span className="text-xs text-gray-500 italic">
+                        Proprietário
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() =>
+                          handleRemoveParticipant(editGroup._id, p._id)
+                        }
+                      >
+                        Remover
+                      </Button>
+                    )}
                   </li>
-                </ul>
-              </div>
-            ))}
+                ))}
+              </ul>
+            </div>
             <div className="flex justify-end gap-2 mt-2">
               <Button
                 type="button"

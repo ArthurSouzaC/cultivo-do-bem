@@ -20,6 +20,7 @@ import type * as chat from "../chat.js";
 import type * as classifier from "../classifier.js";
 import type * as group from "../group.js";
 import type * as harvests from "../harvests.js";
+import type * as notifications from "../notifications.js";
 import type * as postComments from "../postComments.js";
 import type * as postLikes from "../postLikes.js";
 import type * as proposals from "../proposals.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   classifier: typeof classifier;
   group: typeof group;
   harvests: typeof harvests;
+  notifications: typeof notifications;
   postComments: typeof postComments;
   postLikes: typeof postLikes;
   proposals: typeof proposals;
